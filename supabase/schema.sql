@@ -325,3 +325,13 @@ CREATE POLICY "thumbnails_auth_upload" ON storage.objects
   FOR INSERT WITH CHECK (
     bucket_id = 'thumbnails' AND auth.role() = 'authenticated'
   );
+
+-- ========================================
+-- Supabase Realtime 有効化
+-- ========================================
+-- Supabaseダッシュボード > Database > Replication で
+-- 以下のテーブルを Realtime Publication に追加してください:
+--   - videos  (total_votes のリアルタイム更新に使用)
+--
+-- または以下のSQLを実行:
+ALTER PUBLICATION supabase_realtime ADD TABLE videos;

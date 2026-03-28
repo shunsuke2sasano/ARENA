@@ -82,13 +82,6 @@ export default async function VideoPage({
     ? `${supabaseUrl}/storage/v1/object/public/thumbnails/${video.thumbnail_path}`
     : undefined
 
-  const voteBreakdown = isPublished ? {
-    good: video.votes_good,
-    touched: video.votes_touched,
-    shook: video.votes_shook,
-    total: video.total_votes,
-  } : null
-
   const profiles = video.profiles
   const creatorDisplay = isAnonymous ? '匿名' : (profiles?.display_name ?? profiles?.username ?? '不明')
 
@@ -113,6 +106,11 @@ export default async function VideoPage({
             currentVote={myVote}
             isLoggedIn={!!user}
             canVote={!isOwn}
+            isPublished={isPublished}
+            totalVotes={video.total_votes}
+            votesGood={video.votes_good}
+            votesTouched={video.votes_touched}
+            votesShook={video.votes_shook}
           />
 
           <div>
@@ -132,31 +130,6 @@ export default async function VideoPage({
             </div>
           </div>
 
-          {/* 投票内訳（結果発表済のみ） */}
-          {voteBreakdown && voteBreakdown.total > 0 && (
-            <div className="border border-white/10 p-4 space-y-3">
-              <p className="text-xs text-gray-500 uppercase tracking-widest">視聴者反応</p>
-              <div className="space-y-2">
-                {[
-                  { key: 'shook',   label: '震えた ⚡', value: voteBreakdown.shook,   color: 'bg-arena-gold' },
-                  { key: 'touched', label: '刺さった 🎯', value: voteBreakdown.touched, color: 'bg-arena-orange' },
-                  { key: 'good',    label: '良かった 👍', value: voteBreakdown.good,   color: 'bg-gray-500' },
-                ].map((item) => (
-                  <div key={item.key} className="flex items-center gap-3">
-                    <span className="text-xs text-gray-500 w-20">{item.label}</span>
-                    <div className="flex-1 bg-white/5 h-2">
-                      <div
-                        className={`h-2 ${item.color}`}
-                        style={{ width: `${voteBreakdown.total > 0 ? (item.value / voteBreakdown.total) * 100 : 0}%` }}
-                      />
-                    </div>
-                    <span className="text-xs text-gray-600 w-6 text-right">{item.value}</span>
-                  </div>
-                ))}
-              </div>
-              <p className="text-xs text-gray-700">合計: {voteBreakdown.total}票</p>
-            </div>
-          )}
         </div>
 
         {/* サイドバー */}

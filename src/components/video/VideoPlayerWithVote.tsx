@@ -13,6 +13,11 @@ interface VideoPlayerWithVoteProps {
   currentVote: VoteType | null
   isLoggedIn: boolean
   canVote: boolean
+  isPublished: boolean
+  totalVotes: number
+  votesGood: number
+  votesTouched: number
+  votesShook: number
 }
 
 export default function VideoPlayerWithVote({
@@ -22,11 +27,16 @@ export default function VideoPlayerWithVote({
   currentVote,
   isLoggedIn,
   canVote,
+  isPublished,
+  totalVotes,
+  votesGood,
+  votesTouched,
+  votesShook,
 }: VideoPlayerWithVoteProps) {
   const [showVote, setShowVote] = useState(!!currentVote)
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-0">
       <VideoPlayer
         src={videoUrl}
         poster={posterUrl}
@@ -35,22 +45,29 @@ export default function VideoPlayerWithVote({
         }}
       />
 
+      {/* 投票パネル — 動画終了後にスライドアップ */}
       {canVote && showVote && (
-        <div className="border border-white/10 bg-white/2 p-6">
+        <div className="vote-panel-enter border border-t-0 border-white/10 bg-[#0d0c10] px-6 py-5">
           <ViewerVotePanel
             videoId={videoId}
             currentVote={currentVote}
             isLoggedIn={isLoggedIn}
+            totalVotes={totalVotes}
+            votesGood={votesGood}
+            votesTouched={votesTouched}
+            votesShook={votesShook}
+            isPublished={isPublished}
           />
         </div>
       )}
 
-      {canVote && !showVote && !currentVote && (
+      {/* 動画を最後まで見ていない場合の手動トリガー */}
+      {canVote && !showVote && (
         <button
           onClick={() => setShowVote(true)}
-          className="w-full text-xs text-gray-600 hover:text-gray-400 py-2 uppercase tracking-widest"
+          className="w-full text-xs text-gray-700 hover:text-gray-500 py-2.5 border-t border-white/5 uppercase tracking-widest transition-colors"
         >
-          評価する
+          評価する ↓
         </button>
       )}
     </div>
