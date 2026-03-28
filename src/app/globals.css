@@ -1,26 +1,85 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #09080c;
+  --foreground: #f0f0f0;
+  /* デフォルト: 暗黒コロシアム (gold + orange) */
+  --accent-primary: #f5c842;
+  --accent-secondary: #e8520a;
+}
+
+/* テーマ: 血と金 (crimson + gold) */
+[data-theme="purple"] {
+  --accent-primary: #a855f7;
+  --accent-secondary: #7c3aed;
+}
+
+/* テーマ: ネオン闘技場 (purple + teal) */
+[data-theme="teal"] {
+  --accent-primary: #14b8a6;
+  --accent-secondary: #7c3aed;
+}
+
+/* テーマ: 灰と煙 (gray) */
+[data-theme="gray"] {
+  --accent-primary: #9ca3af;
+  --accent-secondary: #6b7280;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-arena-black: #09080c;
+  --color-arena-gold: #f5c842;
+  --color-arena-orange: #e8520a;
+  --color-arena-crimson: #dc143c;
+  --color-arena-accent: var(--accent-primary);
+  --color-arena-accent2: var(--accent-secondary);
+  --font-bebas: 'Bebas Neue', sans-serif;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Inter', 'Noto Sans JP', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* マーキーアニメーション */
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.marquee-track {
+  animation: marquee 20s linear infinite;
+  white-space: nowrap;
+  will-change: transform;
+}
+
+/* スコア数字のフォント */
+.font-bebas {
+  font-family: 'Bebas Neue', sans-serif;
+}
+
+/* フォーカスリング */
+:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* スクロールバー */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: #09080c;
+}
+::-webkit-scrollbar-thumb {
+  background: #333;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-primary);
 }

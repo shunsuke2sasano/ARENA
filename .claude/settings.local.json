@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/sasano/Downloads/**)",
+      "Bash(python3 -c \":*)",
+      "Bash(pip install:*)",
+      "Bash(npx:*)",
+      "Bash(echo \"No:*)",
+      "Bash(printf \"No\\\\nNo\\\\n\")",
+      "Bash(yes no:*)",
+      "Bash(cp:*)",
+      "Bash(cp eslint.config.mjs next.config.ts next-env.d.ts package.json postcss.config.mjs README.md tsconfig.json /c/Users/sasano/Project/ARENA/)",
+      "Bash(cp -r src public /c/Users/sasano/Project/ARENA/)",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}
