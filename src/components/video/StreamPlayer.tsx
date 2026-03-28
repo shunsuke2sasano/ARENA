@@ -1,48 +1,41 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useRef, useState } from 'react'
 
-interface StreamPlayerProps {
-  videoId: string
+interface VideoPlayerProps {
+  src: string
+  poster?: string
   onEnded?: () => void
-  autoplay?: boolean
 }
 
-export default function StreamPlayer({ videoId, onEnded, autoplay = false }: StreamPlayerProps) {
-  const iframeRef = useRef<HTMLIFrameElement>(null)
-
-  useEffect(() => {
-    if (!onEnded) return
-
-    // Cloudflare Stream Player APIでiframe通信
-    const handleMessage = (event: MessageEvent) => {
-      if (event.origin !== 'https://iframe.videodelivery.net') return
-      const data = event.data
-      if (typeof data === 'object' && data?.type === 'ended') {
-        onEnded()
-      }
-    }
-
-    window.addEventListener('message', handleMessage)
-    return () => window.removeEventListener('message', handleMessage)
-  }, [onEnded])
-
-  const src = `https://iframe.videodelivery.net/${videoId}?${new URLSearchParams({
-    autoplay: autoplay ? 'true' : 'false',
-    muted: autoplay ? 'true' : 'false',
-    preload: 'auto',
-    letterboxColor: '09080c',
-  })}`
+export default function VideoPlayer({ src, poster, onEnded }: VideoPlayerProps) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(false)
 
   return (
     <div className="relative w-full aspect-video bg-black">
-      <iframe
-        ref={iframeRef}
+      {isLoading && !error && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-8 h-8 border-2 border-arena-gold/30 border-t-arena-gold rounded-full animate-spin" />
+        </div>
+      )}
+      {error && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <p className="text-gray-500 text-sm">動画を読み込めませんでした</p>
+        </div>
+      )}
+      <video
+        ref={videoRef}
         src={src}
-        className="w-full h-full"
-        allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
-        allowFullScreen
-        title="ARENA Video Player"
+        poster={poster}
+        controls
+        playsInline
+        preload="metadata"
+        onLoadedData={() => setIsLoading(false)}
+        onError={() => { setIsLoading(false); setError(true) }}
+        onEnded={onEnded}
+        className={`w-full h-full object-contain transition-opacity duration-300 ${isLoading ? 'opacity-0' : 'opacity-100'}`}
       />
     </div>
   )

@@ -40,8 +40,8 @@ CREATE TABLE videos (
   round_id UUID NOT NULL REFERENCES rounds(id) ON DELETE CASCADE,
   creator_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
-  cloudflare_video_id TEXT NOT NULL UNIQUE,
-  cloudflare_thumbnail_url TEXT,
+  storage_path TEXT NOT NULL UNIQUE,      -- Supabase Storage内のパス
+  thumbnail_path TEXT,                    -- サムネイル画像のパス（任意）
   duration_seconds INTEGER,
   -- スコア（結果発表後に集計）
   viewer_score NUMERIC(5,2),
@@ -69,7 +69,6 @@ CREATE TABLE viewer_votes (
   vote_type vote_type NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  -- 1動画1票
   UNIQUE(video_id, voter_id)
 );
 
@@ -78,16 +77,14 @@ CREATE TABLE creator_evaluations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   video_id UUID NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
   evaluator_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  -- 5項目（各1-5点）
-  attraction INTEGER NOT NULL CHECK (attraction BETWEEN 1 AND 5),      -- 引力
-  transmission INTEGER NOT NULL CHECK (transmission BETWEEN 1 AND 5),  -- 伝達力
-  completion INTEGER NOT NULL CHECK (completion BETWEEN 1 AND 5),      -- 完成度
-  originality INTEGER NOT NULL CHECK (originality BETWEEN 1 AND 5),    -- 独自性
-  afterglow INTEGER NOT NULL CHECK (afterglow BETWEEN 1 AND 5),        -- 余韻
+  attraction INTEGER NOT NULL CHECK (attraction BETWEEN 1 AND 5),
+  transmission INTEGER NOT NULL CHECK (transmission BETWEEN 1 AND 5),
+  completion INTEGER NOT NULL CHECK (completion BETWEEN 1 AND 5),
+  originality INTEGER NOT NULL CHECK (originality BETWEEN 1 AND 5),
+  afterglow INTEGER NOT NULL CHECK (afterglow BETWEEN 1 AND 5),
   comment TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  -- 1動画につき1評価
   UNIQUE(video_id, evaluator_id)
 );
 
@@ -182,30 +179,24 @@ BEGIN
   IF TG_OP = 'INSERT' THEN
     UPDATE videos SET
       total_votes = total_votes + 1,
-      votes_good = votes_good + CASE WHEN NEW.vote_type = 'good' THEN 1 ELSE 0 END,
+      votes_good    = votes_good    + CASE WHEN NEW.vote_type = 'good'    THEN 1 ELSE 0 END,
       votes_touched = votes_touched + CASE WHEN NEW.vote_type = 'touched' THEN 1 ELSE 0 END,
-      votes_shook = votes_shook + CASE WHEN NEW.vote_type = 'shook' THEN 1 ELSE 0 END,
+      votes_shook   = votes_shook   + CASE WHEN NEW.vote_type = 'shook'   THEN 1 ELSE 0 END,
       updated_at = NOW()
     WHERE id = NEW.video_id;
   ELSIF TG_OP = 'UPDATE' THEN
     UPDATE videos SET
-      votes_good = votes_good
-        + CASE WHEN NEW.vote_type = 'good' THEN 1 ELSE 0 END
-        - CASE WHEN OLD.vote_type = 'good' THEN 1 ELSE 0 END,
-      votes_touched = votes_touched
-        + CASE WHEN NEW.vote_type = 'touched' THEN 1 ELSE 0 END
-        - CASE WHEN OLD.vote_type = 'touched' THEN 1 ELSE 0 END,
-      votes_shook = votes_shook
-        + CASE WHEN NEW.vote_type = 'shook' THEN 1 ELSE 0 END
-        - CASE WHEN OLD.vote_type = 'shook' THEN 1 ELSE 0 END,
+      votes_good    = votes_good    + CASE WHEN NEW.vote_type='good'    THEN 1 ELSE 0 END - CASE WHEN OLD.vote_type='good'    THEN 1 ELSE 0 END,
+      votes_touched = votes_touched + CASE WHEN NEW.vote_type='touched' THEN 1 ELSE 0 END - CASE WHEN OLD.vote_type='touched' THEN 1 ELSE 0 END,
+      votes_shook   = votes_shook   + CASE WHEN NEW.vote_type='shook'   THEN 1 ELSE 0 END - CASE WHEN OLD.vote_type='shook'   THEN 1 ELSE 0 END,
       updated_at = NOW()
     WHERE id = NEW.video_id;
   ELSIF TG_OP = 'DELETE' THEN
     UPDATE videos SET
       total_votes = total_votes - 1,
-      votes_good = votes_good - CASE WHEN OLD.vote_type = 'good' THEN 1 ELSE 0 END,
+      votes_good    = votes_good    - CASE WHEN OLD.vote_type = 'good'    THEN 1 ELSE 0 END,
       votes_touched = votes_touched - CASE WHEN OLD.vote_type = 'touched' THEN 1 ELSE 0 END,
-      votes_shook = votes_shook - CASE WHEN OLD.vote_type = 'shook' THEN 1 ELSE 0 END,
+      votes_shook   = votes_shook   - CASE WHEN OLD.vote_type = 'shook'   THEN 1 ELSE 0 END,
       updated_at = NOW()
     WHERE id = OLD.video_id;
   END IF;
@@ -219,9 +210,7 @@ CREATE TRIGGER trg_update_vote_counts
 
 -- スコア計算関数
 CREATE OR REPLACE FUNCTION calculate_viewer_score(
-  good_votes INTEGER,
-  touched_votes INTEGER,
-  shook_votes INTEGER
+  good_votes INTEGER, touched_votes INTEGER, shook_votes INTEGER
 ) RETURNS NUMERIC AS $$
 DECLARE
   total INTEGER;
@@ -231,14 +220,6 @@ BEGIN
   IF total = 0 THEN RETURN NULL; END IF;
   avg_score := (good_votes * 1.0 + touched_votes * 2.0 + shook_votes * 3.0) / total;
   RETURN ROUND((avg_score - 1.0) / 2.0 * 100.0, 2);
-END;
-$$ LANGUAGE plpgsql IMMUTABLE;
-
-CREATE OR REPLACE FUNCTION calculate_creator_score(
-  total_points INTEGER
-) RETURNS NUMERIC AS $$
-BEGIN
-  RETURN ROUND(total_points::NUMERIC / 25.0 * 100.0, 2);
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
@@ -252,51 +233,95 @@ ALTER TABLE judge_evaluations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE badges ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_badges ENABLE ROW LEVEL SECURITY;
 
--- Profiles: 誰でも読める、本人のみ更新可
+-- Profiles
 CREATE POLICY "profiles_select_all" ON profiles FOR SELECT USING (true);
 CREATE POLICY "profiles_update_own" ON profiles FOR UPDATE USING (auth.uid() = id);
 
--- Rounds: 誰でも読める
+-- Rounds
 CREATE POLICY "rounds_select_all" ON rounds FOR SELECT USING (true);
 
--- Videos:
---   審査中（reviewing）は作者情報を非表示にするのはアプリ層で制御
---   動画自体は誰でも読める
+-- Videos
 CREATE POLICY "videos_select_all" ON videos FOR SELECT USING (true);
 CREATE POLICY "videos_insert_own" ON videos FOR INSERT WITH CHECK (auth.uid() = creator_id);
 CREATE POLICY "videos_update_own" ON videos FOR UPDATE USING (auth.uid() = creator_id);
 
--- Viewer votes: 誰でも読める（集計用）、認証済みのみ投票可
+-- Viewer votes
 CREATE POLICY "viewer_votes_select_all" ON viewer_votes FOR SELECT USING (true);
 CREATE POLICY "viewer_votes_insert_auth" ON viewer_votes FOR INSERT WITH CHECK (auth.uid() = voter_id);
 CREATE POLICY "viewer_votes_update_own" ON viewer_votes FOR UPDATE USING (auth.uid() = voter_id);
 
--- Creator evaluations: 結果発表後のみ読める（アプリ層で制御）、認証済みのみ作成可
+-- Creator evaluations
 CREATE POLICY "creator_evals_select_all" ON creator_evaluations FOR SELECT USING (true);
 CREATE POLICY "creator_evals_insert_auth" ON creator_evaluations FOR INSERT
   WITH CHECK (
     auth.uid() = evaluator_id AND
-    -- 自分の作品は評価できない
     video_id NOT IN (SELECT id FROM videos WHERE creator_id = auth.uid())
   );
 CREATE POLICY "creator_evals_update_own" ON creator_evaluations FOR UPDATE USING (auth.uid() = evaluator_id);
 
--- Judge evaluations: 誰でも読める、審査員のみ作成可（アプリ層で制御）
+-- Judge evaluations
 CREATE POLICY "judge_evals_select_all" ON judge_evaluations FOR SELECT USING (true);
 
--- Badges: 誰でも読める
+-- Badges
 CREATE POLICY "badges_select_all" ON badges FOR SELECT USING (true);
 CREATE POLICY "user_badges_select_all" ON user_badges FOR SELECT USING (true);
 
 -- デフォルトバッジデータ
 INSERT INTO badges (name, description, icon, category) VALUES
-  ('初陣', '初めてARENAに作品を投稿した', '⚔️', 'action'),
-  ('5回戦士', '5回参加した', '🏟️', 'action'),
-  ('10回戦士', '10回参加した', '🔥', 'action'),
-  ('初の80点超え', '初めてスコア80点以上を獲得した', '🎯', 'score'),
-  ('連続上昇', '3回連続でスコアが上昇した', '📈', 'score'),
-  ('余韻の王', '余韻部門で最高評価を獲得した', '🌊', 'item'),
-  ('独自性の鬼', '独自性部門で最高評価を獲得した', '👁️', 'item'),
-  ('引力の帝王', '引力部門で最高評価を獲得した', '🧲', 'item'),
-  ('コンペ優勝', 'コンペ回で1位を獲得した', '👑', 'special'),
-  ('審査員特別賞', '審査員から特別賞を受賞した', '🏆', 'special');
+  ('初陣',       '初めてARENAに作品を投稿した',                '⚔️', 'action'),
+  ('5回戦士',    '5回参加した',                                '🏟️', 'action'),
+  ('10回戦士',   '10回参加した',                               '🔥', 'action'),
+  ('初の80点超え','初めてスコア80点以上を獲得した',             '🎯', 'score'),
+  ('連続上昇',   '3回連続でスコアが上昇した',                  '📈', 'score'),
+  ('余韻の王',   '余韻部門で最高評価を獲得した',               '🌊', 'item'),
+  ('独自性の鬼', '独自性部門で最高評価を獲得した',             '👁️', 'item'),
+  ('引力の帝王', '引力部門で最高評価を獲得した',               '🧲', 'item'),
+  ('コンペ優勝', 'コンペ回で1位を獲得した',                   '👑', 'special'),
+  ('審査員特別賞','審査員から特別賞を受賞した',                '🏆', 'special');
+
+-- ========================================
+-- Supabase Storage バケット設定
+-- ========================================
+-- SupabaseダッシュボードのStorage UIまたは以下SQLで設定:
+
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'videos',
+  'videos',
+  true,
+  2147483648,  -- 2GB
+  ARRAY['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm', 'video/mpeg', 'video/x-matroska']
+)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'thumbnails',
+  'thumbnails',
+  true,
+  5242880,  -- 5MB
+  ARRAY['image/jpeg', 'image/png', 'image/webp']
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- Storage RLS ポリシー
+CREATE POLICY "videos_public_read" ON storage.objects
+  FOR SELECT USING (bucket_id = 'videos');
+
+CREATE POLICY "videos_auth_upload" ON storage.objects
+  FOR INSERT WITH CHECK (
+    bucket_id = 'videos' AND auth.role() = 'authenticated'
+  );
+
+CREATE POLICY "videos_owner_delete" ON storage.objects
+  FOR DELETE USING (
+    bucket_id = 'videos' AND auth.uid()::text = (storage.foldername(name))[2]
+  );
+
+CREATE POLICY "thumbnails_public_read" ON storage.objects
+  FOR SELECT USING (bucket_id = 'thumbnails');
+
+CREATE POLICY "thumbnails_auth_upload" ON storage.objects
+  FOR INSERT WITH CHECK (
+    bucket_id = 'thumbnails' AND auth.role() = 'authenticated'
+  );

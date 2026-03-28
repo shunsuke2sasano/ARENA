@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 // 動画メタデータをSupabaseに保存
+// ※ ファイル本体はブラウザから直接Supabase Storageへアップロード済み
 export async function POST(request: Request) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -10,9 +11,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { roundId, title, cloudflareVideoId } = await request.json()
+  const { roundId, title, storagePath, thumbnailPath, durationSeconds } = await request.json()
 
-  if (!roundId || !title || !cloudflareVideoId) {
+  if (!roundId || !title || !storagePath) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
@@ -20,66 +21,45 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Title must be 1-100 characters' }, { status: 400 })
   }
 
-  // Cloudflare Streamで動画の状態を確認
-  const accountId = process.env.NEXT_PUBLIC_CLOUDFLARE_ACCOUNT_ID
-  const apiToken = process.env.CLOUDFLARE_STREAM_API_TOKEN
+  // ラウンドが投稿受付中か確認
+  const { data: round } = await supabase
+    .from('rounds')
+    .select('id, submission_end, status')
+    .eq('id', roundId)
+    .eq('status', 'open')
+    .maybeSingle()
 
-  if (accountId && apiToken) {
-    const cfResponse = await fetch(
-      `https://api.cloudflare.com/client/v4/accounts/${accountId}/stream/${cloudflareVideoId}`,
-      {
-        headers: { 'Authorization': `Bearer ${apiToken}` },
-      }
-    )
-
-    if (!cfResponse.ok) {
-      return NextResponse.json({ error: 'Video not found in Cloudflare Stream' }, { status: 400 })
-    }
-
-    const cfData = await cfResponse.json()
-    const video = cfData.result
-
-    // まだ処理中でも登録は許可（サムネイルは後で更新される）
-    const thumbnailUrl = video.thumbnail ?? null
-    const duration = video.duration ? Math.round(video.duration) : null
-
-    const { data, error } = await supabase
-      .from('videos')
-      .insert({
-        round_id: roundId,
-        creator_id: user.id,
-        title,
-        cloudflare_video_id: cloudflareVideoId,
-        cloudflare_thumbnail_url: thumbnailUrl,
-        duration_seconds: duration,
-      })
-      .select('id')
-      .single()
-
-    if (error) {
-      if (error.code === '23505') {
-        return NextResponse.json({ error: 'You have already submitted a video for this round' }, { status: 400 })
-      }
-      console.error('DB insert error:', error)
-      return NextResponse.json({ error: 'Failed to save video' }, { status: 500 })
-    }
-
-    return NextResponse.json({ id: data.id })
+  if (!round) {
+    return NextResponse.json({ error: 'Round not found or not accepting submissions' }, { status: 400 })
   }
 
-  // Cloudflare未設定の場合（開発環境）
+  if (new Date(round.submission_end) < new Date()) {
+    return NextResponse.json({ error: 'Submission period has ended' }, { status: 400 })
+  }
+
+  // storagePath がそのユーザーのパスか確認（rounds/{roundId}/{userId}/...）
+  const expectedPrefix = `rounds/${roundId}/${user.id}/`
+  if (!storagePath.startsWith(expectedPrefix)) {
+    return NextResponse.json({ error: 'Invalid storage path' }, { status: 400 })
+  }
+
   const { data, error } = await supabase
     .from('videos')
     .insert({
       round_id: roundId,
       creator_id: user.id,
       title,
-      cloudflare_video_id: cloudflareVideoId,
+      storage_path: storagePath,
+      thumbnail_path: thumbnailPath ?? null,
+      duration_seconds: durationSeconds ?? null,
     })
     .select('id')
     .single()
 
   if (error) {
+    if (error.code === '23505') {
+      return NextResponse.json({ error: 'You have already submitted a video for this round' }, { status: 400 })
+    }
     console.error('DB insert error:', error)
     return NextResponse.json({ error: 'Failed to save video' }, { status: 500 })
   }

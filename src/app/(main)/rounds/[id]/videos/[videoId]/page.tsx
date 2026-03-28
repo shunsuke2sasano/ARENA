@@ -6,11 +6,13 @@ import VideoPlayerWithVote from '@/components/video/VideoPlayerWithVote'
 type VoteType = 'good' | 'touched' | 'shook'
 
 type VideoRow = {
-  id: string; title: string; cloudflare_video_id: string; duration_seconds: number | null
+  id: string; title: string; storage_path: string; thumbnail_path: string | null
+  duration_seconds: number | null
   total_votes: number; votes_good: number; votes_touched: number; votes_shook: number
-  viewer_score: number | null; creator_score: number | null; base_score: number | null
-  final_score: number | null; rank: number | null; creator_id: string; created_at: string
-  profiles: { username: string; display_name: string | null; avatar_url: string | null } | null
+  viewer_score: number | null; creator_score: number | null
+  base_score: number | null; final_score: number | null
+  rank: number | null; creator_id: string; created_at: string
+  profiles: { username: string; display_name: string | null } | null
 }
 
 type RoundRow = {
@@ -31,15 +33,16 @@ export default async function VideoPage({
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  // 動画取得
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+
   const { data: video } = await supabase
     .from('videos')
     .select(`
-      id, title, cloudflare_video_id, duration_seconds,
+      id, title, storage_path, thumbnail_path, duration_seconds,
       total_votes, votes_good, votes_touched, votes_shook,
       viewer_score, creator_score, base_score, final_score, rank,
       creator_id, created_at,
-      profiles (username, display_name, avatar_url)
+      profiles (username, display_name)
     `)
     .eq('id', videoId)
     .eq('round_id', roundId)
@@ -48,7 +51,6 @@ export default async function VideoPage({
 
   if (!video) notFound()
 
-  // ラウンド取得
   const { data: round } = await supabase
     .from('rounds')
     .select('id, title, theme, status, is_competition, submission_end')
@@ -62,7 +64,6 @@ export default async function VideoPage({
   const isPublished = round.status === 'published'
   const isOwn = user?.id === video.creator_id
 
-  // 自分の投票を取得
   let myVote: VoteType | null = null
   if (user) {
     const { data: voteData } = await supabase
@@ -75,7 +76,12 @@ export default async function VideoPage({
     if (voteData) myVote = voteData.vote_type as VoteType
   }
 
-  // 視聴者評価の仕訳（結果発表後のみ）
+  // Supabase Storage の公開URL
+  const videoUrl = `${supabaseUrl}/storage/v1/object/public/videos/${video.storage_path}`
+  const posterUrl = video.thumbnail_path
+    ? `${supabaseUrl}/storage/v1/object/public/thumbnails/${video.thumbnail_path}`
+    : undefined
+
   const voteBreakdown = isPublished ? {
     good: video.votes_good,
     touched: video.votes_touched,
@@ -98,32 +104,30 @@ export default async function VideoPage({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* メインカラム: プレイヤー */}
+        {/* プレイヤー */}
         <div className="lg:col-span-2 space-y-4">
           <VideoPlayerWithVote
             videoId={videoId}
-            cloudflareVideoId={video.cloudflare_video_id}
+            videoUrl={videoUrl}
+            posterUrl={posterUrl}
             currentVote={myVote}
             isLoggedIn={!!user}
-            canVote={!isOwn && (round.status === 'open' || round.status === 'reviewing' || isPublished)}
+            canVote={!isOwn && round.status !== 'open'}
           />
 
-          {/* 動画タイトル */}
           <div>
             <h1 className="text-xl text-white font-medium">{video.title}</h1>
             <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
-              {!isAnonymous && (
-                <Link
-                  href={`/creators/${profiles?.username}`}
-                  className="hover:text-arena-gold transition-colors"
-                >
-                  {creatorDisplay}
-                </Link>
+              {isAnonymous ? (
+                <span className="italic">匿名</span>
+              ) : (
+                <span>{creatorDisplay}</span>
               )}
-              {isAnonymous && <span className="italic">匿名</span>}
               <span>{new Date(video.created_at).toLocaleDateString('ja-JP')}</span>
               {video.duration_seconds && (
-                <span>{Math.floor(video.duration_seconds / 60)}:{(video.duration_seconds % 60).toString().padStart(2, '0')}</span>
+                <span>
+                  {Math.floor(video.duration_seconds / 60)}:{(video.duration_seconds % 60).toString().padStart(2, '0')}
+                </span>
               )}
             </div>
           </div>
@@ -134,19 +138,19 @@ export default async function VideoPage({
               <p className="text-xs text-gray-500 uppercase tracking-widest">視聴者反応</p>
               <div className="space-y-2">
                 {[
-                  { key: 'shook', label: '震えた ⚡', value: voteBreakdown.shook, color: 'bg-arena-gold' },
+                  { key: 'shook',   label: '震えた ⚡', value: voteBreakdown.shook,   color: 'bg-arena-gold' },
                   { key: 'touched', label: '刺さった 🎯', value: voteBreakdown.touched, color: 'bg-arena-orange' },
-                  { key: 'good', label: '良かった 👍', value: voteBreakdown.good, color: 'bg-gray-500' },
+                  { key: 'good',    label: '良かった 👍', value: voteBreakdown.good,   color: 'bg-gray-500' },
                 ].map((item) => (
                   <div key={item.key} className="flex items-center gap-3">
                     <span className="text-xs text-gray-500 w-20">{item.label}</span>
                     <div className="flex-1 bg-white/5 h-2">
                       <div
-                        className={`h-2 ${item.color} transition-all`}
+                        className={`h-2 ${item.color}`}
                         style={{ width: `${voteBreakdown.total > 0 ? (item.value / voteBreakdown.total) * 100 : 0}%` }}
                       />
                     </div>
-                    <span className="text-xs text-gray-600 w-8 text-right">{item.value}</span>
+                    <span className="text-xs text-gray-600 w-6 text-right">{item.value}</span>
                   </div>
                 ))}
               </div>
@@ -155,7 +159,7 @@ export default async function VideoPage({
           )}
         </div>
 
-        {/* サイドカラム: スコア・情報 */}
+        {/* サイドバー */}
         <div className="space-y-4">
           {/* スコア（結果発表済のみ） */}
           {isPublished && video.final_score != null && (
@@ -173,11 +177,11 @@ export default async function VideoPage({
           )}
 
           {/* スコア内訳 */}
-          {isPublished && (
+          {isPublished && (video.viewer_score != null || video.creator_score != null) && (
             <div className="border border-white/10 p-4 space-y-3">
               <p className="text-xs text-gray-500 uppercase tracking-widest">スコア内訳</p>
               {[
-                { label: '視聴者 (60%)', value: video.viewer_score, color: 'bg-arena-gold' },
+                { label: '視聴者 (60%)',      value: video.viewer_score,  color: 'bg-arena-gold' },
                 { label: 'クリエイター (40%)', value: video.creator_score, color: 'bg-arena-orange' },
               ].map((item) => (
                 <div key={item.label} className="space-y-1">
@@ -186,10 +190,7 @@ export default async function VideoPage({
                     <span className="text-white">{item.value?.toFixed(1) ?? '—'}</span>
                   </div>
                   <div className="w-full bg-white/5 h-1">
-                    <div
-                      className={`h-1 ${item.color}`}
-                      style={{ width: `${item.value ?? 0}%` }}
-                    />
+                    <div className={`h-1 ${item.color}`} style={{ width: `${item.value ?? 0}%` }} />
                   </div>
                 </div>
               ))}
@@ -205,11 +206,18 @@ export default async function VideoPage({
             <p className="text-arena-gold text-sm">テーマ: {round.theme}</p>
           </div>
 
-          {/* 審査中の注意 */}
+          {/* 匿名審査中バナー */}
           {isAnonymous && (
             <div className="border border-yellow-400/20 bg-yellow-400/5 p-4 text-center">
               <p className="text-yellow-400 text-xs">匿名審査期間中</p>
               <p className="text-gray-600 text-xs mt-1">作者情報は結果発表まで非表示</p>
+            </div>
+          )}
+
+          {/* 自分の動画 */}
+          {isOwn && (
+            <div className="border border-white/10 p-4 text-center">
+              <p className="text-xs text-gray-500">あなたの作品</p>
             </div>
           )}
         </div>

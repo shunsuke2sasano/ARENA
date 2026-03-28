@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 
 interface Round {
   id: string
@@ -12,11 +13,65 @@ interface Round {
 
 interface VideoUploaderProps {
   rounds: Round[]
+  userId: string
 }
 
 type UploadState = 'idle' | 'uploading' | 'saving' | 'done' | 'error'
 
-export default function VideoUploader({ rounds }: VideoUploaderProps) {
+// Canvas APIで動画のサムネイルを抽出する
+async function extractThumbnail(file: File, timeSeconds = 2): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    const video = document.createElement('video')
+    const url = URL.createObjectURL(file)
+    video.src = url
+    video.currentTime = timeSeconds
+    video.muted = true
+
+    video.addEventListener('seeked', () => {
+      try {
+        const canvas = document.createElement('canvas')
+        canvas.width = 640
+        canvas.height = Math.round((640 / video.videoWidth) * video.videoHeight)
+        const ctx = canvas.getContext('2d')
+        ctx?.drawImage(video, 0, 0, canvas.width, canvas.height)
+        canvas.toBlob((blob) => {
+          URL.revokeObjectURL(url)
+          resolve(blob)
+        }, 'image/jpeg', 0.8)
+      } catch {
+        URL.revokeObjectURL(url)
+        resolve(null)
+      }
+    }, { once: true })
+
+    video.addEventListener('error', () => {
+      URL.revokeObjectURL(url)
+      resolve(null)
+    }, { once: true })
+
+    video.load()
+  })
+}
+
+// 動画の尺をブラウザで取得する
+function getVideoDuration(file: File): Promise<number | null> {
+  return new Promise((resolve) => {
+    const video = document.createElement('video')
+    const url = URL.createObjectURL(file)
+    video.src = url
+    video.preload = 'metadata'
+    video.addEventListener('loadedmetadata', () => {
+      URL.revokeObjectURL(url)
+      resolve(isFinite(video.duration) ? Math.round(video.duration) : null)
+    }, { once: true })
+    video.addEventListener('error', () => {
+      URL.revokeObjectURL(url)
+      resolve(null)
+    }, { once: true })
+  })
+}
+
+export default function VideoUploader({ rounds, userId }: VideoUploaderProps) {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -35,7 +90,6 @@ export default function VideoUploader({ rounds }: VideoUploaderProps) {
       setError('動画ファイルを選択してください')
       return
     }
-    // 2GB制限
     if (f.size > 2 * 1024 * 1024 * 1024) {
       setError('ファイルサイズは2GB以内にしてください')
       return
@@ -43,7 +97,6 @@ export default function VideoUploader({ rounds }: VideoUploaderProps) {
 
     setFile(f)
     setError(null)
-    // ファイル名からタイトルを自動設定（拡張子除く）
     if (!title) {
       setTitle(f.name.replace(/\.[^/.]+$/, '').slice(0, 100))
     }
@@ -53,8 +106,7 @@ export default function VideoUploader({ rounds }: VideoUploaderProps) {
     e.preventDefault()
     const f = e.dataTransfer.files[0]
     if (!f) return
-    const fakeEvent = { target: { files: [f] } } as unknown as React.ChangeEvent<HTMLInputElement>
-    handleFileChange(fakeEvent)
+    handleFileChange({ target: { files: [f] } } as unknown as React.ChangeEvent<HTMLInputElement>)
   }, [handleFileChange])
 
   async function handleSubmit(e: React.FormEvent) {
@@ -65,70 +117,98 @@ export default function VideoUploader({ rounds }: VideoUploaderProps) {
     setUploadState('uploading')
     setProgress(0)
 
+    const supabase = createClient()
+    const ext = file.name.split('.').pop() ?? 'mp4'
+    const timestamp = Date.now()
+    const storagePath = `rounds/${selectedRoundId}/${userId}/${timestamp}.${ext}`
+
     try {
-      // Step 1: ダイレクトアップロードURLを取得
-      const urlRes = await fetch('/api/videos/upload-url', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roundId: selectedRoundId }),
-      })
+      // Step 1: 動画をSupabase Storageにアップロード
+      // supabase-jsはXHRプログレスに対応していないため、XMLHttpRequestで実装
+      const { data: { session } } = await supabase.auth.getSession()
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+      const uploadUrl = `${supabaseUrl}/storage/v1/object/videos/${storagePath}`
 
-      if (!urlRes.ok) {
-        const err = await urlRes.json()
-        throw new Error(err.error ?? 'アップロードURLの取得に失敗しました')
-      }
-
-      const { videoId, uploadURL } = await urlRes.json()
-
-      // Step 2: Cloudflare Streamに直接アップロード（XHRでプログレス取得）
       await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest()
-        xhr.upload.addEventListener('progress', (e) => {
-          if (e.lengthComputable) {
-            setProgress(Math.round((e.loaded / e.total) * 100))
+        xhr.upload.addEventListener('progress', (ev) => {
+          if (ev.lengthComputable) {
+            setProgress(Math.round((ev.loaded / ev.total) * 100))
           }
         })
         xhr.addEventListener('load', () => {
           if (xhr.status >= 200 && xhr.status < 300) {
             resolve()
           } else {
-            reject(new Error(`Upload failed: ${xhr.status}`))
+            try {
+              const body = JSON.parse(xhr.responseText)
+              reject(new Error(body.error ?? `Upload failed: ${xhr.status}`))
+            } catch {
+              reject(new Error(`Upload failed: ${xhr.status}`))
+            }
           }
         })
         xhr.addEventListener('error', () => reject(new Error('ネットワークエラーが発生しました')))
 
-        xhr.open('POST', uploadURL)
+        xhr.open('POST', uploadUrl)
+        xhr.setRequestHeader('Authorization', `Bearer ${session?.access_token}`)
+        xhr.setRequestHeader('x-upsert', 'false')
+
         const formData = new FormData()
-        formData.append('file', file)
+        formData.append('', file, file.name)
         xhr.send(formData)
       })
 
-      // Step 3: Supabaseに動画メタデータを保存
+      setProgress(100)
+
+      // Step 2: サムネイルと尺を取得
+      const [thumbnailBlob, durationSeconds] = await Promise.all([
+        extractThumbnail(file),
+        getVideoDuration(file),
+      ])
+
+      let thumbnailPath: string | null = null
+      if (thumbnailBlob) {
+        const thumbPath = `rounds/${selectedRoundId}/${userId}/${timestamp}.jpg`
+        const { error: thumbError } = await supabase.storage
+          .from('thumbnails')
+          .upload(thumbPath, thumbnailBlob, { contentType: 'image/jpeg', upsert: false })
+        if (!thumbError) thumbnailPath = thumbPath
+      }
+
+      // Step 3: Supabaseにメタデータを保存
       setUploadState('saving')
-      const saveRes = await fetch('/api/videos', {
+      const res = await fetch('/api/videos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           roundId: selectedRoundId,
           title: title.trim(),
-          cloudflareVideoId: videoId,
+          storagePath,
+          thumbnailPath,
+          durationSeconds,
         }),
       })
 
-      if (!saveRes.ok) {
-        const err = await saveRes.json()
+      if (!res.ok) {
+        const err = await res.json()
         throw new Error(err.error ?? '動画の保存に失敗しました')
       }
 
-      const { id: newVideoId } = await saveRes.json()
+      const { id: newVideoId } = await res.json()
       setUploadState('done')
 
-      // 動画ページへリダイレクト
       setTimeout(() => {
         router.push(`/rounds/${selectedRoundId}/videos/${newVideoId}`)
-      }, 1000)
+      }, 800)
 
     } catch (err) {
+      // アップロード失敗時はStorageのファイルを削除
+      try {
+        const supabaseClean = createClient()
+        await supabaseClean.storage.from('videos').remove([storagePath])
+      } catch { /* ignore */ }
+
       setError(err instanceof Error ? err.message : '不明なエラーが発生しました')
       setUploadState('error')
     }
@@ -141,6 +221,8 @@ export default function VideoUploader({ rounds }: VideoUploaderProps) {
       </div>
     )
   }
+
+  const isSubmitting = ['uploading', 'saving', 'done'].includes(uploadState)
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -170,8 +252,10 @@ export default function VideoUploader({ rounds }: VideoUploaderProps) {
               <div className="text-white font-medium">{round.title}</div>
               <div className="text-arena-gold text-sm">テーマ: {round.theme}</div>
               <div className="text-gray-600 text-xs mt-1">
-                投稿期限: {new Date(round.submission_end).toLocaleDateString('ja-JP', {
-                  year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                投稿期限:{' '}
+                {new Date(round.submission_end).toLocaleDateString('ja-JP', {
+                  year: 'numeric', month: 'long', day: 'numeric',
+                  hour: '2-digit', minute: '2-digit',
                 })}
               </div>
             </div>
@@ -204,27 +288,28 @@ export default function VideoUploader({ rounds }: VideoUploaderProps) {
         <div
           onDrop={handleDrop}
           onDragOver={(e) => e.preventDefault()}
-          onClick={() => fileInputRef.current?.click()}
-          className={`border-2 border-dashed p-10 text-center cursor-pointer transition-colors ${
-            file
-              ? 'border-arena-gold/50 bg-arena-gold/5'
-              : 'border-white/10 hover:border-white/20'
+          onClick={() => !isSubmitting && fileInputRef.current?.click()}
+          className={`border-2 border-dashed p-10 text-center transition-colors ${
+            isSubmitting
+              ? 'opacity-50 cursor-default border-white/5'
+              : file
+                ? 'border-arena-gold/50 bg-arena-gold/5 cursor-pointer'
+                : 'border-white/10 hover:border-white/20 cursor-pointer'
           }`}
         >
           <input
             ref={fileInputRef}
             type="file"
-            accept="video/*"
+            accept="video/mp4,video/quicktime,video/x-msvideo,video/webm,video/mpeg,video/x-matroska"
             onChange={handleFileChange}
+            disabled={isSubmitting}
             className="hidden"
           />
           {file ? (
             <div className="space-y-1">
-              <div className="text-arena-gold font-medium">{file.name}</div>
-              <div className="text-gray-500 text-sm">
-                {(file.size / 1024 / 1024).toFixed(1)} MB
-              </div>
-              <div className="text-gray-600 text-xs mt-2">クリックして変更</div>
+              <div className="text-arena-gold font-medium truncate">{file.name}</div>
+              <div className="text-gray-500 text-sm">{(file.size / 1024 / 1024).toFixed(1)} MB</div>
+              {!isSubmitting && <div className="text-gray-600 text-xs mt-2">クリックして変更</div>}
             </div>
           ) : (
             <div className="space-y-2">
@@ -233,7 +318,7 @@ export default function VideoUploader({ rounds }: VideoUploaderProps) {
               <div className="text-gray-600 text-sm">またはクリックして選択</div>
               <div className="text-gray-700 text-xs mt-3">
                 実写・60〜180秒・最大2GB<br />
-                MP4, MOV, AVI など主要フォーマット対応
+                MP4, MOV, AVI, WebM, MKV 対応
               </div>
             </div>
           )}
@@ -247,41 +332,48 @@ export default function VideoUploader({ rounds }: VideoUploaderProps) {
         </div>
       )}
 
-      {/* アップロード中のプログレス */}
-      {(uploadState === 'uploading' || uploadState === 'saving' || uploadState === 'done') && (
+      {/* プログレスバー */}
+      {uploadState === 'uploading' && (
         <div className="space-y-2">
           <div className="flex justify-between text-xs text-gray-400">
-            <span>
-              {uploadState === 'uploading' && `アップロード中... ${progress}%`}
-              {uploadState === 'saving' && '動画を登録中...'}
-              {uploadState === 'done' && '投稿完了！'}
-            </span>
-            <span>{uploadState === 'uploading' ? `${progress}%` : ''}</span>
+            <span>アップロード中...</span>
+            <span>{progress}%</span>
           </div>
-          <div className="w-full bg-white/5 h-1">
+          <div className="w-full bg-white/5 h-1.5">
             <div
-              className="h-1 bg-arena-gold transition-all duration-300"
-              style={{
-                width: uploadState === 'uploading'
-                  ? `${progress}%`
-                  : uploadState === 'saving' ? '95%'
-                  : '100%'
-              }}
+              className="h-1.5 bg-arena-gold transition-all duration-200"
+              style={{ width: `${progress}%` }}
             />
           </div>
+        </div>
+      )}
+      {uploadState === 'saving' && (
+        <div className="space-y-2">
+          <div className="text-xs text-gray-400">サムネイル生成・登録中...</div>
+          <div className="w-full bg-white/5 h-1.5">
+            <div className="h-1.5 bg-arena-gold w-[95%] transition-all duration-500" />
+          </div>
+        </div>
+      )}
+      {uploadState === 'done' && (
+        <div className="border border-arena-gold/30 bg-arena-gold/5 px-4 py-3 text-arena-gold text-sm text-center">
+          投稿完了！動画ページに移動します…
         </div>
       )}
 
       {/* 送信ボタン */}
       <button
         type="submit"
-        disabled={!file || !title.trim() || !selectedRoundId || ['uploading', 'saving', 'done'].includes(uploadState)}
+        disabled={!file || !title.trim() || !selectedRoundId || isSubmitting}
         className="w-full bg-arena-gold text-black font-bold py-4 uppercase tracking-widest hover:bg-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-lg"
       >
-        {uploadState === 'idle' || uploadState === 'error' ? '闘技場に投稿する' :
-         uploadState === 'uploading' ? `アップロード中... ${progress}%` :
-         uploadState === 'saving' ? '登録中...' :
-         '投稿完了'}
+        {uploadState === 'idle' || uploadState === 'error'
+          ? '闘技場に投稿する'
+          : uploadState === 'uploading'
+            ? `アップロード中... ${progress}%`
+            : uploadState === 'saving'
+              ? '登録中...'
+              : '投稿完了'}
       </button>
 
       <p className="text-xs text-gray-700 text-center">

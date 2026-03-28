@@ -8,8 +8,8 @@ export const revalidate = 30
 type Video = {
   id: string
   title: string
-  cloudflare_video_id: string
-  cloudflare_thumbnail_url: string | null
+  storage_path: string
+  thumbnail_path: string | null
   duration_seconds: number | null
   total_votes: number
   final_score: number | null
@@ -39,14 +39,13 @@ export default async function RoundPage({ params }: { params: Promise<{ id: stri
 
   if (!round) notFound()
 
-  // 審査中は作者情報を非表示
   const isAnonymous = round.status === 'reviewing'
   const isPublished = round.status === 'published'
 
   const { data: videos } = await supabase
     .from('videos')
     .select(`
-      id, title, cloudflare_video_id, cloudflare_thumbnail_url,
+      id, title, storage_path, thumbnail_path,
       duration_seconds, total_votes, final_score, base_score, rank, creator_id,
       profiles (username, display_name)
     `)
@@ -58,9 +57,9 @@ export default async function RoundPage({ params }: { params: Promise<{ id: stri
     open: '投稿受付中',
     reviewing: '匿名審査中',
     published: '結果発表済',
-  }[round.status as string] ?? ''
+  }[round.status] ?? ''
 
-  // 自分の投稿済み動画
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
   const myVideo = user ? videos?.find((v) => v.creator_id === user.id) : null
 
   return (
@@ -87,16 +86,16 @@ export default async function RoundPage({ params }: { params: Promise<{ id: stri
           </div>
           <div className="text-right space-y-1">
             <div className={`text-xs border px-3 py-1 inline-block ${
-              round.status === 'open' ? 'text-green-400 border-green-400/30' :
+              round.status === 'open'      ? 'text-green-400 border-green-400/30' :
               round.status === 'reviewing' ? 'text-yellow-400 border-yellow-400/30' :
-              'text-gray-400 border-gray-400/30'
+                                             'text-gray-400 border-gray-400/30'
             }`}>
               {statusLabel}
             </div>
             {round.status === 'open' && (
               <div className="text-gray-600 text-xs">
                 締切: {new Date(round.submission_end).toLocaleDateString('ja-JP', {
-                  month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                  month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
                 })}
               </div>
             )}
@@ -104,7 +103,7 @@ export default async function RoundPage({ params }: { params: Promise<{ id: stri
         </div>
       </div>
 
-      {/* 匿名審査中の注意書き */}
+      {/* 匿名審査期間バナー */}
       {isAnonymous && (
         <div className="border border-yellow-400/20 bg-yellow-400/5 px-6 py-4 mb-8 text-center">
           <p className="font-bebas text-xl text-yellow-400 tracking-wide mb-1">匿名審査期間</p>
@@ -112,7 +111,7 @@ export default async function RoundPage({ params }: { params: Promise<{ id: stri
         </div>
       )}
 
-      {/* 投稿ボタン (受付中で未投稿の場合) */}
+      {/* 投稿ボタン（受付中・未投稿の場合） */}
       {round.status === 'open' && user && !myVideo && (
         <div className="mb-8 text-center">
           <Link
@@ -126,9 +125,7 @@ export default async function RoundPage({ params }: { params: Promise<{ id: stri
 
       {/* 動画グリッド */}
       {!videos?.length ? (
-        <div className="text-center py-20 text-gray-600">
-          まだ投稿がありません
-        </div>
+        <div className="text-center py-20 text-gray-600">まだ投稿がありません</div>
       ) : (
         <div>
           {isPublished && (
@@ -144,6 +141,7 @@ export default async function RoundPage({ params }: { params: Promise<{ id: stri
                 roundId={id}
                 isAnonymous={isAnonymous}
                 isPublished={isPublished}
+                supabaseUrl={supabaseUrl}
               />
             ))}
           </div>

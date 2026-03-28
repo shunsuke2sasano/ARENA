@@ -10,7 +10,6 @@ export default async function SubmitPage() {
     redirect('/auth/login?redirectTo=/submit')
   }
 
-  // 投稿受付中のラウンドを取得
   type OpenRound = { id: string; title: string; theme: string; submission_end: string }
   const { data: rounds } = await supabase
     .from('rounds')
@@ -27,7 +26,7 @@ export default async function SubmitPage() {
         <p className="text-gray-500 text-sm">実写・60〜180秒・1ラウンドにつき1作品</p>
       </div>
 
-      <VideoUploader rounds={rounds ?? []} />
+      <VideoUploader rounds={rounds ?? []} userId={user.id} />
     </div>
   )
 }

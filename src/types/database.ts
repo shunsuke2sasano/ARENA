@@ -95,8 +95,8 @@ export interface Database {
           round_id: string
           creator_id: string
           title: string
-          cloudflare_video_id: string
-          cloudflare_thumbnail_url: string | null
+          storage_path: string
+          thumbnail_path: string | null
           duration_seconds: number | null
           viewer_score: number | null
           creator_score: number | null
@@ -116,8 +116,8 @@ export interface Database {
           round_id: string
           creator_id: string
           title: string
-          cloudflare_video_id: string
-          cloudflare_thumbnail_url?: string | null
+          storage_path: string
+          thumbnail_path?: string | null
           duration_seconds?: number | null
           viewer_score?: number | null
           creator_score?: number | null
@@ -134,7 +134,7 @@ export interface Database {
         }
         Update: {
           title?: string
-          cloudflare_thumbnail_url?: string | null
+          thumbnail_path?: string | null
           duration_seconds?: number | null
           viewer_score?: number | null
           creator_score?: number | null

@@ -1,40 +1,41 @@
 'use client'
 
 import { useState } from 'react'
-import StreamPlayer from './StreamPlayer'
+import VideoPlayer from './StreamPlayer'
 import ViewerVotePanel from './ViewerVotePanel'
 
 type VoteType = 'good' | 'touched' | 'shook'
 
 interface VideoPlayerWithVoteProps {
   videoId: string
-  cloudflareVideoId: string
+  videoUrl: string
+  posterUrl?: string
   currentVote: VoteType | null
   isLoggedIn: boolean
-  canVote: boolean  // 審査中かpublishedのopen期間 (=審査中でもvote可)
+  canVote: boolean
 }
 
 export default function VideoPlayerWithVote({
   videoId,
-  cloudflareVideoId,
+  videoUrl,
+  posterUrl,
   currentVote,
   isLoggedIn,
   canVote,
 }: VideoPlayerWithVoteProps) {
-  const [showVote, setShowVote] = useState(false)
-  const [voted, setVoted] = useState(!!currentVote)
+  const [showVote, setShowVote] = useState(!!currentVote)
 
   return (
     <div className="space-y-4">
-      <StreamPlayer
-        videoId={cloudflareVideoId}
+      <VideoPlayer
+        src={videoUrl}
+        poster={posterUrl}
         onEnded={() => {
-          if (canVote && !voted) setShowVote(true)
+          if (canVote) setShowVote(true)
         }}
       />
 
-      {/* 視聴後に投票パネルを表示 */}
-      {canVote && (showVote || currentVote) && (
+      {canVote && showVote && (
         <div className="border border-white/10 bg-white/2 p-6">
           <ViewerVotePanel
             videoId={videoId}
@@ -44,7 +45,6 @@ export default function VideoPlayerWithVote({
         </div>
       )}
 
-      {/* 投票を手動表示するボタン（まだ最後まで見ていない場合） */}
       {canVote && !showVote && !currentVote && (
         <button
           onClick={() => setShowVote(true)}
