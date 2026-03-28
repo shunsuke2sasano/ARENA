@@ -40,3 +40,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .env.local
+
+# superbase
+NEXT_PUBLIC_SUPABASE_URL=https://bdwobpsfztguptijbncg.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJkd29icHNmenRndXB0aWpibmNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2NTg2OTMsImV4cCI6MjA5MDIzNDY5M30.9F9_-lRd1-XetAlkLrS_ZBDE3Sc7pN-jhk7hPrK5g-U

@@ -44,6 +44,7 @@ export interface Database {
           theme_color?: ThemeColor
           updated_at?: string
         }
+        Relationships: []
       }
       rounds: {
         Row: {
@@ -86,6 +87,7 @@ export interface Database {
           review_end?: string
           published_at?: string | null
         }
+        Relationships: []
       }
       videos: {
         Row: {
@@ -146,6 +148,20 @@ export interface Database {
           votes_shook?: number
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "videos_round_id_fkey"
+            columns: ["round_id"]
+            referencedRelation: "rounds"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "videos_creator_id_fkey"
+            columns: ["creator_id"]
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       viewer_votes: {
         Row: {
@@ -168,6 +184,20 @@ export interface Database {
           vote_type?: VoteType
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "viewer_votes_video_id_fkey"
+            columns: ["video_id"]
+            referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "viewer_votes_voter_id_fkey"
+            columns: ["voter_id"]
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       creator_evaluations: {
         Row: {
@@ -205,6 +235,20 @@ export interface Database {
           comment?: string | null
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "creator_evaluations_video_id_fkey"
+            columns: ["video_id"]
+            referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "creator_evaluations_evaluator_id_fkey"
+            columns: ["evaluator_id"]
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       judge_evaluations: {
         Row: {
@@ -227,6 +271,7 @@ export interface Database {
           bonus_score?: number
           critique?: string
         }
+        Relationships: []
       }
       badges: {
         Row: {
@@ -251,6 +296,7 @@ export interface Database {
           icon?: string
           category?: BadgeCategory
         }
+        Relationships: []
       }
       user_badges: {
         Row: {
@@ -268,6 +314,7 @@ export interface Database {
           awarded_at?: string
         }
         Update: never
+        Relationships: []
       }
     }
     Views: {

@@ -13,7 +13,9 @@
       "Bash(cp -r src public /c/Users/sasano/Project/ARENA/)",
       "Bash(npm install:*)",
       "Bash(npm run:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d[''''version'''']\\)\")"
     ]
   }
 }
