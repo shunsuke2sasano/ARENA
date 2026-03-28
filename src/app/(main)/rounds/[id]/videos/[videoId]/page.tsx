@@ -112,7 +112,7 @@ export default async function VideoPage({
             posterUrl={posterUrl}
             currentVote={myVote}
             isLoggedIn={!!user}
-            canVote={!isOwn && round.status !== 'open'}
+            canVote={!isOwn}
           />
 
           <div>
@@ -209,9 +209,28 @@ export default async function VideoPage({
           {/* 匿名審査中バナー */}
           {isAnonymous && (
             <div className="border border-yellow-400/20 bg-yellow-400/5 p-4 text-center">
-              <p className="text-yellow-400 text-xs">匿名審査期間中</p>
+              <p className="text-yellow-400 text-xs font-medium">匿名審査期間中</p>
               <p className="text-gray-600 text-xs mt-1">作者情報は結果発表まで非表示</p>
+              <p className="text-gray-700 text-xs mt-2 italic">クリエイター相互評価は結果発表後に解禁</p>
             </div>
+          )}
+
+          {/* クリエイター相互評価ボタン（結果発表後・他者の動画のみ） */}
+          {isPublished && !isOwn && user && (
+            <Link
+              href={`/rounds/${roundId}/videos/${videoId}/evaluate`}
+              className="block text-center border border-arena-orange/40 text-arena-orange text-xs px-4 py-3 hover:bg-arena-orange/10 transition-colors uppercase tracking-widest"
+            >
+              クリエイターとして評価する
+            </Link>
+          )}
+          {isPublished && !isOwn && !user && (
+            <Link
+              href={`/auth/login?redirectTo=/rounds/${roundId}/videos/${videoId}/evaluate`}
+              className="block text-center border border-white/10 text-gray-600 text-xs px-4 py-3 hover:border-white/20 transition-colors"
+            >
+              ログインしてクリエイター評価
+            </Link>
           )}
 
           {/* 自分の動画 */}

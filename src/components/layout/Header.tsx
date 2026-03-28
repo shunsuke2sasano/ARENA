@@ -7,9 +7,10 @@ import type { User } from '@supabase/supabase-js'
 
 interface HeaderProps {
   user: User | null
+  isAdmin?: boolean
 }
 
-export default function Header({ user }: HeaderProps) {
+export default function Header({ user, isAdmin }: HeaderProps) {
   const router = useRouter()
 
   async function handleSignOut() {
@@ -42,6 +43,11 @@ export default function Header({ user }: HeaderProps) {
               <Link href="/dashboard" className="text-gray-400 hover:text-white transition-colors uppercase tracking-wide text-xs">
                 ダッシュボード
               </Link>
+              {isAdmin && (
+                <Link href="/admin" className="text-arena-gold/60 hover:text-arena-gold transition-colors uppercase tracking-wide text-xs">
+                  管理
+                </Link>
+              )}
               <button
                 onClick={handleSignOut}
                 className="text-xs text-gray-600 hover:text-gray-400 transition-colors uppercase tracking-wide"
