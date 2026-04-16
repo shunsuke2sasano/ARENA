@@ -103,6 +103,18 @@ export default async function RoundPage({ params }: { params: Promise<{ id: stri
         </div>
       </div>
 
+      {/* 結果発表リンク */}
+      {isPublished && (
+        <div className="mb-6 flex justify-end">
+          <Link
+            href={`/rounds/${id}/results`}
+            className="inline-block px-5 py-2 border border-arena-gold/40 text-arena-gold text-xs uppercase tracking-widest hover:bg-arena-gold/10 transition-colors"
+          >
+            結果発表ページ →
+          </Link>
+        </div>
+      )}
+
       {/* 匿名審査期間バナー */}
       {isAnonymous && (
         <div className="border border-yellow-400/20 bg-yellow-400/5 px-6 py-4 mb-8 text-center">

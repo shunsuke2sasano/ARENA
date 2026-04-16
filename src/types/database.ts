@@ -22,6 +22,7 @@ export interface Database {
           avatar_url: string | null
           bio: string | null
           theme_color: ThemeColor
+          is_creator: boolean
           created_at: string
           updated_at: string
         }
@@ -32,6 +33,7 @@ export interface Database {
           avatar_url?: string | null
           bio?: string | null
           theme_color?: ThemeColor
+          is_creator?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -42,6 +44,7 @@ export interface Database {
           avatar_url?: string | null
           bio?: string | null
           theme_color?: ThemeColor
+          is_creator?: boolean
           updated_at?: string
         }
         Relationships: []

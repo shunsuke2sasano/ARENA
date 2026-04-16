@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { isAdmin } from '@/lib/admin'
+import { awardBadgesForRound } from '@/lib/badges'
 import { NextResponse } from 'next/server'
 
 // ステータス遷移の許可ルール: open → reviewing → published
@@ -144,6 +145,16 @@ export async function PATCH(
   if (error) {
     console.error('Status update error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  // published への遷移後にバッジを自動付与
+  if (newStatus === 'published') {
+    try {
+      await awardBadgesForRound(id)
+    } catch (err) {
+      // バッジ付与失敗はステータス更新の成否に影響させない
+      console.error('Badge awarding error:', err)
+    }
   }
 
   return NextResponse.json({ id, status: newStatus })

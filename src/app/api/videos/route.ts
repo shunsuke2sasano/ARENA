@@ -64,5 +64,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Failed to save video' }, { status: 500 })
   }
 
+  // 動画を投稿したユーザーを is_creator = true にする
+  await supabase
+    .from('profiles')
+    .update({ is_creator: true })
+    .eq('id', user.id)
+
   return NextResponse.json({ id: data.id })
 }

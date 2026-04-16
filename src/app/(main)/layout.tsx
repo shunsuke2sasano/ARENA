@@ -14,9 +14,19 @@ export default async function MainLayout({
   const { data: { user } } = await supabase.auth.getUser()
   const adminUser = user ? isAdmin(user.id) : false
 
+  let username: string | null = null
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('username')
+      .eq('id', user.id)
+      .maybeSingle()
+    username = profile?.username ?? null
+  }
+
   return (
     <>
-      <Header user={user} isAdmin={adminUser} />
+      <Header user={user} isAdmin={adminUser} username={username} />
       <Marquee text={MARQUEE_TEXT} />
       <main className="flex-1">{children}</main>
       <footer className="border-t border-white/5 py-8 text-center text-xs text-gray-700">
