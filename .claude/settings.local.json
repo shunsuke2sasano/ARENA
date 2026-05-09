@@ -20,7 +20,8 @@
       "Bash(find C:UserssasanoProjectARENAsrc -type f -name *.ts -o -name *.tsx)",
       "Bash(find C:UserssasanoProjectARENA -type f \\\\\\(-name *seed* -o -name *.json \\\\\\) ! -path */node_modules/* ! -path */.next/*)",
       "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "Bash(git push *)"
     ]
   }
 }
