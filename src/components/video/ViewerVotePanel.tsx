@@ -105,7 +105,7 @@ export default function ViewerVotePanel({
     }
   }, [])
 
-  // Supabase Realtime で votes テーブルを購読
+  // Supabase Realtime で videos テーブルを購読
   useEffect(() => {
     const supabase = createClient()
     const channel = supabase
@@ -114,6 +114,7 @@ export default function ViewerVotePanel({
         'postgres_changes',
         { event: '*', schema: 'public', table: 'videos', filter: `id=eq.${videoId}` },
         (payload) => {
+          console.log('[Realtime] videos change received:', payload)
           const row = payload.new as {
             total_votes: number
             votes_good: number
@@ -133,7 +134,9 @@ export default function ViewerVotePanel({
           }
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        console.log('[Realtime] subscription status:', status)
+      })
 
     return () => { supabase.removeChannel(channel) }
   }, [videoId])
@@ -160,9 +163,26 @@ export default function ViewerVotePanel({
       )
 
     if (err) {
+      console.error('[Vote] upsert error:', err)
       setError('投票に失敗しました。もう一度お試しください。')
     } else {
+      console.log('[Vote] upsert success, voteType:', voteType, 'prev:', currentVote)
       const isChange = currentVote !== null
+
+      // Realtime が届く前にローカル state を即時更新（楽観的更新）
+      if (!isChange) {
+        setTotal((t) => t + 1)
+      }
+      if (isChange && currentVote !== voteType) {
+        setGood((n) => n + (voteType === 'good' ? 1 : 0) - (currentVote === 'good' ? 1 : 0))
+        setTouched((n) => n + (voteType === 'touched' ? 1 : 0) - (currentVote === 'touched' ? 1 : 0))
+        setShook((n) => n + (voteType === 'shook' ? 1 : 0) - (currentVote === 'shook' ? 1 : 0))
+      } else if (!isChange) {
+        setGood((n) => n + (voteType === 'good' ? 1 : 0))
+        setTouched((n) => n + (voteType === 'touched' ? 1 : 0))
+        setShook((n) => n + (voteType === 'shook' ? 1 : 0))
+      }
+
       setCurrentVote(voteType)
       setConfirmed(voteType)
       if (confirmedTimerRef.current) clearTimeout(confirmedTimerRef.current)
