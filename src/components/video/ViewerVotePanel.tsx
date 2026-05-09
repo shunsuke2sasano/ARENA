@@ -166,21 +166,24 @@ export default function ViewerVotePanel({
       console.error('[Vote] upsert error:', err)
       setError('投票に失敗しました。もう一度お試しください。')
     } else {
-      console.log('[Vote] upsert success, voteType:', voteType, 'prev:', currentVote)
-      const isChange = currentVote !== null
+      const prevVote = currentVote
+      const isNewVote = prevVote === null
+      console.log('[Vote] upsert success, voteType:', voteType, 'prev:', prevVote)
 
       // Realtime が届く前にローカル state を即時更新（楽観的更新）
-      if (!isChange) {
+      // delta = (新しい票の寄与) - (古い票の寄与)
+      if (isNewVote) {
         setTotal((t) => t + 1)
       }
-      if (isChange && currentVote !== voteType) {
-        setGood((n) => n + (voteType === 'good' ? 1 : 0) - (currentVote === 'good' ? 1 : 0))
-        setTouched((n) => n + (voteType === 'touched' ? 1 : 0) - (currentVote === 'touched' ? 1 : 0))
-        setShook((n) => n + (voteType === 'shook' ? 1 : 0) - (currentVote === 'shook' ? 1 : 0))
-      } else if (!isChange) {
-        setGood((n) => n + (voteType === 'good' ? 1 : 0))
-        setTouched((n) => n + (voteType === 'touched' ? 1 : 0))
-        setShook((n) => n + (voteType === 'shook' ? 1 : 0))
+      setGood((n) => n + (voteType === 'good' ? 1 : 0) - (prevVote === 'good' ? 1 : 0))
+      setTouched((n) => n + (voteType === 'touched' ? 1 : 0) - (prevVote === 'touched' ? 1 : 0))
+      setShook((n) => n + (voteType === 'shook' ? 1 : 0) - (prevVote === 'shook' ? 1 : 0))
+
+      // 新規投票時はカウントアニメーションを即時発火
+      if (isNewVote && countRef.current) {
+        countRef.current.classList.remove('count-pop')
+        void countRef.current.offsetWidth
+        countRef.current.classList.add('count-pop')
       }
 
       setCurrentVote(voteType)
@@ -189,7 +192,7 @@ export default function ViewerVotePanel({
       confirmedTimerRef.current = setTimeout(() => setConfirmed(null), 600)
 
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
-      setToast(isChange ? '投票を変更しました' : '投票ありがとうございました')
+      setToast(isNewVote ? '投票ありがとうございました' : '投票を変更しました')
       toastTimerRef.current = setTimeout(() => setToast(null), 3000)
     }
     setLoading(false)
