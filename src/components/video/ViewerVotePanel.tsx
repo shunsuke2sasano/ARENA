@@ -170,21 +170,13 @@ export default function ViewerVotePanel({
       const isNewVote = prevVote === null
       console.log('[Vote] upsert success, voteType:', voteType, 'prev:', prevVote)
 
-      // Realtime が届く前にローカル state を即時更新（楽観的更新）
-      // delta = (新しい票の寄与) - (古い票の寄与)
+      // 楽観的更新（即時フィードバック）
       if (isNewVote) {
         setTotal((t) => t + 1)
       }
       setGood((n) => n + (voteType === 'good' ? 1 : 0) - (prevVote === 'good' ? 1 : 0))
       setTouched((n) => n + (voteType === 'touched' ? 1 : 0) - (prevVote === 'touched' ? 1 : 0))
       setShook((n) => n + (voteType === 'shook' ? 1 : 0) - (prevVote === 'shook' ? 1 : 0))
-
-      // 新規投票時はカウントアニメーションを即時発火
-      if (isNewVote && countRef.current) {
-        countRef.current.classList.remove('count-pop')
-        void countRef.current.offsetWidth
-        countRef.current.classList.add('count-pop')
-      }
 
       setCurrentVote(voteType)
       setConfirmed(voteType)
@@ -194,6 +186,27 @@ export default function ViewerVotePanel({
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
       setToast(isNewVote ? '投票ありがとうございました' : '投票を変更しました')
       toastTimerRef.current = setTimeout(() => setToast(null), 3000)
+
+      // Realtime が届かない場合の保険: DB から最新値を直接取得
+      const { data: fresh } = await supabase
+        .from('videos')
+        .select('total_votes, votes_good, votes_touched, votes_shook')
+        .eq('id', videoId)
+        .single()
+
+      if (fresh) {
+        console.log('[Vote] fresh counts from DB:', fresh)
+        setTotal(fresh.total_votes)
+        setGood(fresh.votes_good)
+        setTouched(fresh.votes_touched)
+        setShook(fresh.votes_shook)
+
+        if (countRef.current) {
+          countRef.current.classList.remove('count-pop')
+          void countRef.current.offsetWidth
+          countRef.current.classList.add('count-pop')
+        }
+      }
     }
     setLoading(false)
   }
