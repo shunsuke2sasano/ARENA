@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { isAdmin } from '@/lib/admin'
 import { awardBadgesForRound } from '@/lib/badges'
 import { NextResponse } from 'next/server'
+import type { RoundStatus } from '@/types/database'
 
 // ステータス遷移の許可ルール: open → reviewing → published
 const VALID_TRANSITIONS: Record<string, string> = {
@@ -42,7 +43,7 @@ export async function PATCH(
     )
   }
 
-  const updateData: Record<string, unknown> = { status: newStatus }
+  const updateData: { status: RoundStatus; published_at?: string } = { status: newStatus as RoundStatus }
 
   // published への遷移時にスコアを集計する
   if (newStatus === 'published') {
