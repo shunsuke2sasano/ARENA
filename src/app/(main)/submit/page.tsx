@@ -15,7 +15,6 @@ export default async function SubmitPage() {
     .from('rounds')
     .select('id, title, theme, submission_end')
     .eq('status', 'open')
-    .gte('submission_end', new Date().toISOString())
     .order('submission_end', { ascending: true })
     .returns<OpenRound[]>()
 
