@@ -94,6 +94,13 @@ export default function ViewerVotePanel({
   const [touched, setTouched] = useState(initialTouched)
   const [shook, setShook] = useState(initialShook)
   const countRef = useRef<HTMLSpanElement>(null)
+  const confirmedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (confirmedTimerRef.current) clearTimeout(confirmedTimerRef.current)
+    }
+  }, [])
 
   // Supabase Realtime で votes テーブルを購読
   useEffect(() => {
@@ -154,8 +161,8 @@ export default function ViewerVotePanel({
     } else {
       setCurrentVote(voteType)
       setConfirmed(voteType)
-      // 確定フラッシュは短時間で消す
-      setTimeout(() => setConfirmed(null), 600)
+      if (confirmedTimerRef.current) clearTimeout(confirmedTimerRef.current)
+      confirmedTimerRef.current = setTimeout(() => setConfirmed(null), 600)
     }
     setLoading(false)
   }

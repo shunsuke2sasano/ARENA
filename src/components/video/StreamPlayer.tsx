@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 
 interface VideoPlayerProps {
   src: string
@@ -10,8 +10,37 @@ interface VideoPlayerProps {
 
 export default function VideoPlayer({ src, poster, onEnded }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const onEndedRef = useRef(onEnded)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(false)
+
+  useEffect(() => { onEndedRef.current = onEnded })
+
+  // native listener + timeupdate fallback: src が変わるたびにリセット
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+
+    let fired = false
+
+    const fireOnce = () => {
+      if (!fired) { fired = true; onEndedRef.current?.() }
+    }
+
+    const handleTimeUpdate = () => {
+      if (video.duration > 0 && video.currentTime / video.duration >= 0.98) {
+        fireOnce()
+      }
+    }
+
+    video.addEventListener('ended', fireOnce)
+    video.addEventListener('timeupdate', handleTimeUpdate)
+
+    return () => {
+      video.removeEventListener('ended', fireOnce)
+      video.removeEventListener('timeupdate', handleTimeUpdate)
+    }
+  }, [src])
 
   return (
     <div className="relative w-full aspect-video bg-black">
@@ -34,7 +63,6 @@ export default function VideoPlayer({ src, poster, onEnded }: VideoPlayerProps) 
         preload="metadata"
         onLoadedData={() => setIsLoading(false)}
         onError={() => { setIsLoading(false); setError(true) }}
-        onEnded={onEnded}
         className={`w-full h-full object-contain transition-opacity duration-300 ${isLoading ? 'opacity-0' : 'opacity-100'}`}
       />
     </div>

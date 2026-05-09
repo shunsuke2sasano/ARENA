@@ -65,7 +65,7 @@ export default function VideoPlayerWithVote({
       {canVote && !showVote && (
         <button
           onClick={() => setShowVote(true)}
-          className="w-full text-xs text-gray-700 hover:text-gray-500 py-2.5 border-t border-white/5 uppercase tracking-widest transition-colors"
+          className="w-full text-xs text-gray-500 hover:text-gray-300 py-2.5 border-t border-white/10 uppercase tracking-widest transition-colors"
         >
           評価する ↓
         </button>
