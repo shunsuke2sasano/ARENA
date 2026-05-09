@@ -87,6 +87,7 @@ export default function ViewerVotePanel({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirmed, setConfirmed] = useState<VoteType | null>(initialVote)
+  const [toast, setToast] = useState<string | null>(null)
 
   // リアルタイム票数
   const [total, setTotal] = useState(initialTotal)
@@ -95,10 +96,12 @@ export default function ViewerVotePanel({
   const [shook, setShook] = useState(initialShook)
   const countRef = useRef<HTMLSpanElement>(null)
   const confirmedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     return () => {
       if (confirmedTimerRef.current) clearTimeout(confirmedTimerRef.current)
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
     }
   }, [])
 
@@ -159,10 +162,15 @@ export default function ViewerVotePanel({
     if (err) {
       setError('投票に失敗しました。もう一度お試しください。')
     } else {
+      const isChange = currentVote !== null
       setCurrentVote(voteType)
       setConfirmed(voteType)
       if (confirmedTimerRef.current) clearTimeout(confirmedTimerRef.current)
       confirmedTimerRef.current = setTimeout(() => setConfirmed(null), 600)
+
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+      setToast(isChange ? '投票を変更しました' : '投票ありがとうございました')
+      toastTimerRef.current = setTimeout(() => setToast(null), 3000)
     }
     setLoading(false)
   }
@@ -253,12 +261,17 @@ export default function ViewerVotePanel({
         </div>
       )}
 
-      {/* 押し直し案内 */}
-      {currentVote && (
-        <p className="text-[11px] text-gray-700 text-center">
+      {/* 投票フィードバック */}
+      {toast ? (
+        <div className="vote-panel-enter flex items-center gap-2.5 border border-white/10 bg-white/3 px-4 py-2.5">
+          <span className="text-arena-gold text-sm leading-none">✓</span>
+          <span className="text-sm text-gray-200">{toast}</span>
+        </div>
+      ) : currentVote ? (
+        <p className="text-[11px] text-gray-600 text-center">
           別のボタンを押すと変更できます
         </p>
-      )}
+      ) : null}
 
       {/* 未ログイン案内 */}
       {!isLoggedIn && (
